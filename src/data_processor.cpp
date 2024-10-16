@@ -16,6 +16,7 @@
 
 void DataProcessor::WriteParquetFile(const std::shared_ptr<arrow::Table>& table, const std::string& filepath) {
     auto start = std::chrono::high_resolution_clock::now();
+
     // Open file output stream
     std::shared_ptr<arrow::io::FileOutputStream> outfile;
     PARQUET_ASSIGN_OR_THROW(
@@ -50,8 +51,7 @@ void DataProcessor::WriteParquetFile(const std::shared_ptr<arrow::Table>& table,
     auto end = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double> elapsed = end - start;
-
-    std::cout << "Data saved to " << filepath << "  , Time: " << elapsed.count() << " seconds " << std::endl;
+    //std::cout << "Data saved to " << filepath << "  , Time: " << elapsed.count() << " seconds " << std::endl;
 }
 
 
@@ -80,14 +80,14 @@ void DataProcessor::loadParquet(const std::string& filepath) {
 }
 
 // DataProcessor::process with multithreading
-std::shared_ptr<arrow::Table> DataProcessor::process(const std::string& filepath) {
-    ThreadPool pool(8);  // Maximum 4 threads for writing to parquet files
+void DataProcessor::process(const std::string& filepath) {
+    ThreadPool pool(4);  // Maximum 4 threads for writing to parquet files
     std::string query = "SELECT * FROM parquet_scan('" + filepath + "')";
     duckdb_arrow result;
 
     if (duckdb_query_arrow(conn, query.c_str(), &result) != DuckDBSuccess) {
         std::cerr << "Error executing query and retrieving Arrow result" << std::endl;
-        return nullptr;
+        return;  // No need to return a table anymore
     }
 
     auto arrow_schema = static_cast<duckdb_arrow_schema>(malloc(sizeof(struct ArrowSchema)));
@@ -95,18 +95,18 @@ std::shared_ptr<arrow::Table> DataProcessor::process(const std::string& filepath
         std::cerr << "Failed to allocate memory for Arrow schema" << std::endl;
         free(arrow_schema);
         duckdb_destroy_arrow(&result);
-        return nullptr;
+        return;
     }
 
     if (duckdb_query_arrow_schema(result, &arrow_schema) != DuckDBSuccess) {
         std::cerr << "Error retrieving Arrow schema" << std::endl;
         free(arrow_schema);
         duckdb_destroy_arrow(&result);
-        return nullptr;
+        return;
     }
 
     std::shared_ptr<arrow::Schema> schema = arrow::ImportSchema(reinterpret_cast<struct ArrowSchema*>(arrow_schema)).ValueOrDie();
-    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+    std::vector<duckdb_arrow_array> batches;
     int64_t total_rows = 0;
     int file_counter = 0;
 
@@ -122,65 +122,86 @@ std::shared_ptr<arrow::Table> DataProcessor::process(const std::string& filepath
             break;
         }
 
-        // TODO: Work but try for somthink better
-        if(ArrowArrayIsReleased(reinterpret_cast<struct ArrowArray*>(arrow_array))) {
-        // if (reinterpret_cast<ArrowArray*>(arrow_array)->length <= 0) {
+        // Check if the Arrow array is released (empty)
+        if (ArrowArrayIsReleased(reinterpret_cast<struct ArrowArray*>(arrow_array))) {
             std::cout << "Reached the end of data (empty Arrow array). Exiting loop." << std::endl;
-            std::vector<std::shared_ptr<arrow::RecordBatch>> batches_to_write = std::move(batches);
+            std::vector<duckdb_arrow_array> batches_to_write = std::move(batches);
             int current_file_counter = file_counter++;
 
+            std::cout << batches_to_write.empty() << std::endl;
             // Enqueue a task in the thread pool to write the parquet file
-            //TODO: try to export to duckdb
-            pool.enqueue([batches_to_write, schema, current_file_counter, this] {
-                auto arrow_table = arrow::Table::FromRecordBatches(schema, batches_to_write).ValueOrDie();
-                std::string output_file = "./output_parquet/output_part_" + std::to_string(current_file_counter) + ".parquet";
-                WriteParquetFile(arrow_table, output_file);
-            });
+            if (!batches_to_write.empty()) {
+                pool.enqueue([batches_to_write, schema, current_file_counter, this] {
+                    auto start = std::chrono::high_resolution_clock::now();
+
+                    std::vector<std::shared_ptr<arrow::RecordBatch>> record_batches;
+                    for (auto& arrow_array : batches_to_write) {
+                        // Convert duckdb_arrow_array to arrow::RecordBatch
+                        std::shared_ptr<arrow::RecordBatch> record_batch = arrow::ImportRecordBatch(reinterpret_cast<struct ArrowArray*>(arrow_array), schema).ValueOrDie();
+                        record_batches.push_back(record_batch);
+
+                        // Release the Arrow array after conversion
+                        //reinterpret_cast<struct ArrowArray*>(arrow_array)->release(reinterpret_cast<struct ArrowArray*>(arrow_array));
+                        //free(arrow_array);  // Free the memory
+                    }
+                    record_batches.clear();
+                    auto arrow_table = arrow::Table::FromRecordBatches(schema, record_batches).ValueOrDie();
+                    std::string output_file = "./output_parquet/output_part_" + std::to_string(current_file_counter) + ".parquet";
+                    WriteParquetFile(arrow_table, output_file);
+
+                    auto end = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double> elapsed = end - start;
+                    std::cout << "Data ||saved to " << output_file << "  , Time: " << elapsed.count() << " seconds " << std::endl;
+                    });
+            }
 
             // Reset the batches and total rows
             batches.clear();
             total_rows = 0;
-            reinterpret_cast<struct ArrowArray*>(arrow_array)->release;
-            free(arrow_array);  // Clean up the memory
             break;
         }
 
-        if(!ArrowArrayIsReleased(reinterpret_cast<struct ArrowArray*>(arrow_array))) {
-            std::shared_ptr<arrow::RecordBatch> record_batch = arrow::ImportRecordBatch(reinterpret_cast<struct ArrowArray*>(arrow_array), schema).ValueOrDie();
-            batches.push_back(record_batch);
-            total_rows += record_batch->num_rows();
+        // Add non-empty arrow_array to the batches
+        if (!ArrowArrayIsReleased(reinterpret_cast<struct ArrowArray*>(arrow_array)) && reinterpret_cast<struct ArrowArray*>(arrow_array)->length > 0 && reinterpret_cast<struct ArrowArray*>(arrow_array)->length <= 2048) {
+            batches.push_back(arrow_array);
+            total_rows += reinterpret_cast<struct ArrowArray*>(arrow_array)->length;
+            std::cout << total_rows << std::endl;
         }
-
         if (total_rows >= 1000000) {
             // Capture the current batches and file counter to pass to the thread
-            std::vector<std::shared_ptr<arrow::RecordBatch>> batches_to_write = std::move(batches);
+            std::vector<duckdb_arrow_array> batches_to_write = std::move(batches);
             int current_file_counter = file_counter++;
 
             // Enqueue a task in the thread pool to write the parquet file
-            //TODO: try to export to duckdb
             pool.enqueue([batches_to_write, schema, current_file_counter, this] {
-                auto arrow_table = arrow::Table::FromRecordBatches(schema, batches_to_write).ValueOrDie();
+                auto start = std::chrono::high_resolution_clock::now();
+
+                std::vector<std::shared_ptr<arrow::RecordBatch>> record_batches;
+                for (auto& arrow_array : batches_to_write) {
+                    // Convert duckdb_arrow_array to arrow::RecordBatch
+                    std::shared_ptr<arrow::RecordBatch> record_batch = arrow::ImportRecordBatch(reinterpret_cast<struct ArrowArray*>(arrow_array), schema).ValueOrDie();
+                    record_batches.push_back(record_batch);
+                }
+
+                auto arrow_table = arrow::Table::FromRecordBatches(schema, record_batches).ValueOrDie();
                 std::string output_file = "./output_parquet/output_part_" + std::to_string(current_file_counter) + ".parquet";
                 WriteParquetFile(arrow_table, output_file);
-            });
+
+                auto end = std::chrono::high_resolution_clock::now();
+                std::chrono::duration<double> elapsed = end - start;
+                std::cout << "Data saved to " << output_file << "  , Time: " << elapsed.count() << " seconds " << std::endl;
+                });
 
             // Reset the batches and total rows
             batches.clear();
             total_rows = 0;
         }
-
-        // TODO: Urgent find another way!!!
-        // if (record_batch->num_rows() < 2048) {
-        //     break;
-        // }
-        reinterpret_cast<struct ArrowArray*>(arrow_array)->release;
-        free(arrow_array);
     }
 
     free(arrow_schema);
     duckdb_destroy_arrow(&result);
 
-    return arrow::Table::FromRecordBatches(schema, batches).ValueOrDie();
+    // No return needed anymore, process is void
 }
 
 

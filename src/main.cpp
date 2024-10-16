@@ -87,7 +87,7 @@ void PrintArrowTable(const std::shared_ptr<arrow::Table>& table) {
 
 int main(int argc, char* argv[]) {
     // TODO: create an 50,000,000 file with 30 cols
-    std::string filepath = "..\\data\\parqtest\\*.parquet";
+    std::string filepath = "C:\\Users\\stavr\\Documents\\data\\test_output_16000.parquet";
     std::cout << "Reading file: " << filepath << std::endl;
     bool printTable = true;
 
@@ -102,20 +102,20 @@ int main(int argc, char* argv[]) {
     // processor.loadParquet(filepath);
 
     auto start = std::chrono::high_resolution_clock::now();
-    std::shared_ptr<arrow::Table> table = processor.process(filepath);
+    processor.process(filepath);
     auto end = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double> elapsed = end - start;
     std::cout << "Time taken by function: " << elapsed.count() << " seconds." << std::endl;
 
-    if (table) {
-        std::cout << "Successfully processed data into Arrow Table." << std::endl;
-        if (printTable) {
-            //PrintArrowTable(table);
-        }
-    } else {
-        std::cerr << "Failed to process data." << std::endl;
-    }
+    //if (table) {
+    //    std::cout << "Successfully processed data into Arrow Table." << std::endl;
+    //    if (printTable) {
+    //        //PrintArrowTable(table);
+    //    }
+    //} else {
+    //    std::cerr << "Failed to process data." << std::endl;
+    //}
 
     return 0;
 }
