@@ -82,24 +82,8 @@ void PrintArrowTable(const std::shared_ptr<arrow::Table>& table) {
     }
 }
 
-
-
-
-int main(int argc, char* argv[]) {
-    // TODO: create an 50,000,000 file with 30 cols
-    std::string filepath = "C:\\Users\\stavr\\Documents\\data\\test_output_16000.parquet";
-    std::cout << "Reading file: " << filepath << std::endl;
-    bool printTable = true;
-
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-        if (arg == "--enable-print") {
-            printTable = true;
-        }
-    }
-
-    DataProcessor processor;
-    // processor.loadParquet(filepath);
+void runProcessFile(DataProcessor& processor, const std::string& filepath) {
+    std::cout << "Running process with file: " << filepath << std::endl;
 
     auto start = std::chrono::high_resolution_clock::now();
     processor.process(filepath);
@@ -107,6 +91,62 @@ int main(int argc, char* argv[]) {
 
     std::chrono::duration<double> elapsed = end - start;
     std::cout << "Time taken by function: " << elapsed.count() << " seconds." << std::endl;
+}
+
+void runProcessQuery(DataProcessor& processor, const std::string& query) {
+    std::cout << "Running process with query: " << query << std::endl;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    std::shared_ptr<arrow::Table> table = processor.processQuery(query);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "Time taken by function: " << elapsed.count() << " seconds." << std::endl;
+
+    if (table) {
+        std::cout << "Successfully processed data into Arrow Table." << std::endl;
+        PrintArrowTable(table);
+    } else {
+        std::cerr << "Failed to process data." << std::endl;
+    }
+}
+
+int main(int argc, char* argv[]) {
+
+    DataProcessor processor;
+    std::string runMode = "query";
+    // std::string runMode = "filepath";
+
+
+    if(runMode == "query") {
+        std::string query = "SELECT * FROM parquet_scan('C:\\Users\\stavr\\Documents\\data\\test_output_16000.parquet')";
+        runProcessQuery(processor, query);
+    }
+    else if (runMode == "filepath") {
+        std::string filepath = "C:\\Users\\stavr\\Documents\\data\\test_output_16000.parquet";
+        runProcessFile(processor, filepath);
+    }
+    // TODO: create an 50,000,000 file with 30 cols
+    // std::string filepath = "C:\\Users\\stavr\\Documents\\data\\test_output_16000.parquet";
+    // std::cout << "Reading file: " << filepath << std::endl;
+    // bool printTable = true;
+
+    // for (int i = 1; i < argc; ++i) {
+    //     std::string arg = argv[i];
+    //     if (arg == "--enable-print") {
+    //         printTable = true;
+    //     }
+    // }
+
+    // DataProcessor processor;
+    // // processor.loadParquet(filepath);
+
+    // auto start = std::chrono::high_resolution_clock::now();
+    // processor.process(filepath);
+    // auto end = std::chrono::high_resolution_clock::now();
+
+    // std::chrono::duration<double> elapsed = end - start;
+    // std::cout << "Time taken by function: " << elapsed.count() << " seconds." << std::endl;
 
     //if (table) {
     //    std::cout << "Successfully processed data into Arrow Table." << std::endl;
