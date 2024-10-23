@@ -6,6 +6,7 @@
 #include "duckdb.h"  // Include DuckDB C API header
 #include <arrow/api.h>
 
+
 #ifdef _WIN32
     #ifdef BUILD_DLL
         #define DLL_EXPORT __declspec(dllexport)

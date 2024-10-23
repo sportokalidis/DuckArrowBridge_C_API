@@ -114,16 +114,16 @@ void runProcessQuery(DataProcessor& processor, const std::string& query) {
 int main(int argc, char* argv[]) {
 
     DataProcessor processor;
-    std::string runMode = "query";
-    // std::string runMode = "filepath";
+    // std::string runMode = "query";
+    std::string runMode = "filepath";
 
 
     if(runMode == "query") {
-        std::string query = "SELECT * FROM parquet_scan('C:\\Users\\stavr\\Documents\\data\\test_output_16000.parquet')";
+        std::string query = "SELECT * FROM parquet_scan('C:\\Users\\stavr\\Documents\\data\\test_output_light.parquet')";
         runProcessQuery(processor, query);
     }
     else if (runMode == "filepath") {
-        std::string filepath = "C:\\Users\\stavr\\Documents\\data\\test_output_16000.parquet";
+        std::string filepath = "C:\\Users\\stavr\\Documents\\data\\test_output_large.parquet";
         runProcessFile(processor, filepath);
     }
     // TODO: create an 50,000,000 file with 30 cols

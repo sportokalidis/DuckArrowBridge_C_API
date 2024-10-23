@@ -13,6 +13,7 @@
 #include <parquet/exception.h>
 #include <arrow/c/helpers.h>
 #include <chrono>
+#include "task_executor.hpp"
 
 void DataProcessor::WriteParquetFile(const std::shared_ptr<arrow::Table>& table, const std::string& filepath) {
     auto start = std::chrono::high_resolution_clock::now();
@@ -79,6 +80,8 @@ void DataProcessor::loadParquet(const std::string& filepath) {
     // You can store the result if needed for later access
 }
 
+
+/*
 // DataProcessor::process with multithreading
 void DataProcessor::process(const std::string& filepath) {
     ThreadPool pool(4);  // Maximum 4 threads for writing to parquet files
@@ -203,8 +206,17 @@ void DataProcessor::process(const std::string& filepath) {
 
     // No return needed anymore, process is void
 }
+*/
+void DataProcessor::process(const std::string& filepath) {
+    std::string query = "SELECT * FROM parquet_scan('" + filepath + "')";
+    std::string outputPath = "./output_parquet";
+    int maxThreads = 4;
+    ResultType resultType = ResultType::PARQUET;
 
-
+    // Create TaskExecutor and run
+    TaskExecutor executor(query, outputPath, maxThreads, resultType);
+    executor.run();
+}
 
 std::shared_ptr<arrow::Table> DataProcessor::processQuery(const std::string& query) {
     // Execute the query using DuckDB
