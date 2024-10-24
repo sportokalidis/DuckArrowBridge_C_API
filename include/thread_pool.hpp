@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <functional>
 #include <vector>
+#include <arrow/python/pyarrow.h>
 
 class ThreadPool {
 public:

@@ -19,6 +19,7 @@
 #include <arrow/c/helpers.h>
 #include <chrono>
 #include "task_executor.hpp"
+#include <arrow/python/pyarrow.h>
 
 TaskExecutor::TaskExecutor(const std::string& query, const std::string& outputPath, int maxThreads, ResultType resultType, size_t memoryLimit)
     : query(query), outputPath(outputPath), maxThreads(maxThreads), resultType(resultType), memoryLimit(memoryLimit) {}

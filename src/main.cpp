@@ -6,6 +6,7 @@
 #include <arrow/io/api.h>
 #include <arrow/ipc/api.h>
 #include <iostream>
+#include <arrow/python/pyarrow.h>
 
 
 // Function to print the data in an Apache Arrow Table
@@ -114,8 +115,8 @@ void runProcessQuery(DataProcessor& processor, const std::string& query) {
 int main(int argc, char* argv[]) {
 
     DataProcessor processor;
-    // std::string runMode = "query";
-    std::string runMode = "filepath";
+    std::string runMode = "query";
+    // std::string runMode = "filepath";
 
 
     if(runMode == "query") {

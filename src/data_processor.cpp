@@ -14,6 +14,7 @@
 #include <arrow/c/helpers.h>
 #include <chrono>
 #include "task_executor.hpp"
+#include <arrow/python/pyarrow.h>
 
 void DataProcessor::WriteParquetFile(const std::shared_ptr<arrow::Table>& table, const std::string& filepath) {
     auto start = std::chrono::high_resolution_clock::now();
@@ -81,7 +82,7 @@ void DataProcessor::loadParquet(const std::string& filepath) {
 }
 
 
-/*
+
 // DataProcessor::process with multithreading
 void DataProcessor::process(const std::string& filepath) {
     ThreadPool pool(4);  // Maximum 4 threads for writing to parquet files
@@ -206,7 +207,9 @@ void DataProcessor::process(const std::string& filepath) {
 
     // No return needed anymore, process is void
 }
-*/
+
+
+/*
 void DataProcessor::process(const std::string& filepath) {
     std::string query = "SELECT * FROM parquet_scan('" + filepath + "')";
     std::string outputPath = "./output_parquet";
@@ -217,7 +220,7 @@ void DataProcessor::process(const std::string& filepath) {
     TaskExecutor executor(query, outputPath, maxThreads, resultType);
     executor.run();
 }
-
+*/
 std::shared_ptr<arrow::Table> DataProcessor::processQuery(const std::string& query) {
     // Execute the query using DuckDB
     duckdb_arrow result;
@@ -282,4 +285,65 @@ std::shared_ptr<arrow::Table> DataProcessor::processQuery(const std::string& que
 
     // Return the resulting Arrow Table
     return table;
+}
+
+std::vector<std::shared_ptr<arrow::RecordBatch>> DataProcessor::processQuery2(const std::string& query) {
+    // Execute the query using DuckDB
+    duckdb_arrow result;
+    if (duckdb_query_arrow(conn, query.c_str(), &result) != DuckDBSuccess) {
+        std::cerr << "Error executing query and retrieving Arrow result" << std::endl;
+        return {};
+    }
+
+    // Get the Arrow schema
+    auto arrow_schema = static_cast<duckdb_arrow_schema>(malloc(sizeof(struct ArrowSchema)));
+    if (!arrow_schema) {
+        std::cerr << "Failed to allocate memory for Arrow schema" << std::endl;
+        duckdb_destroy_arrow(&result);
+        return {};
+    }
+
+    if (duckdb_query_arrow_schema(result, &arrow_schema) != DuckDBSuccess) {
+        std::cerr << "Error retrieving Arrow schema" << std::endl;
+        free(arrow_schema);
+        duckdb_destroy_arrow(&result);
+        return {};
+    }
+
+    // Convert Arrow schema to Arrow C++ schema
+    std::shared_ptr<arrow::Schema> schema = arrow::ImportSchema(reinterpret_cast<struct ArrowSchema*>(arrow_schema)).ValueOrDie();
+    free(arrow_schema);
+
+    // Convert Arrow batches to Arrow RecordBatches
+    std::vector<std::shared_ptr<arrow::RecordBatch>> record_batches;
+    while (true) {
+        auto arrow_array = static_cast<duckdb_arrow_array>(malloc(sizeof(struct ArrowArray)));
+        if (!arrow_array) {
+            std::cerr << "Failed to allocate memory for Arrow array" << std::endl;
+            break;
+        }
+
+        if (duckdb_query_arrow_array(result, &arrow_array) != DuckDBSuccess) {
+            free(arrow_array);
+            break;
+        }
+
+        // If the Arrow array is released (empty), we reached the end
+        if (ArrowArrayIsReleased(reinterpret_cast<struct ArrowArray*>(arrow_array))) {
+            free(arrow_array);
+            break;
+        }
+
+        // Convert the ArrowArray to RecordBatch
+        auto record_batch = arrow::ImportRecordBatch(reinterpret_cast<struct ArrowArray*>(arrow_array), schema).ValueOrDie();
+        record_batches.push_back(record_batch);
+
+        reinterpret_cast<struct ArrowArray*>(arrow_array)->release(reinterpret_cast<struct ArrowArray*>(arrow_array));
+    }
+
+    // Cleanup
+    duckdb_destroy_arrow(&result);
+
+    // Return the vector of RecordBatches
+    return record_batches;
 }

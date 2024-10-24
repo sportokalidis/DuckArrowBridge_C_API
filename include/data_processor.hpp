@@ -5,7 +5,7 @@
 #include <memory>
 #include "duckdb.h"  // Include DuckDB C API header
 #include <arrow/api.h>
-
+#include <arrow/python/pyarrow.h>
 
 #ifdef _WIN32
     #ifdef BUILD_DLL
@@ -23,6 +23,7 @@ public:
     void loadParquet(const std::string& filepath);
     void process(const std::string& filepath);
     std::shared_ptr<arrow::Table> processQuery(const std::string& query); // New function
+    std::vector<std::shared_ptr<arrow::RecordBatch>> processQuery2(const std::string& query);
     static void WriteParquetFile(const std::shared_ptr<arrow::Table>& table, const std::string& filepath);
 private:
     duckdb_database db;

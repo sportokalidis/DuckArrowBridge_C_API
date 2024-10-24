@@ -7,10 +7,12 @@ set(CMAKE_CXX_STANDARD 17)
 include_directories(include)
 include_directories(C:\\Users\\stavr\\AppData\\Local\\Programs\\Python\\Python312\\Include)
 include_directories(C:\\Users\\stavr\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\pybind11\\include)
+include_directories(C:\\Users\\stavr\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\pyarrow\\include)
 
 # Link directories
 link_directories(lib)
 link_directories(C:\\Users\\stavr\\AppData\\Local\\Programs\\Python\\Python312\\libs)
+link_directories(C:\\Users\\stavr\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\pyarrow)
 
 # Add source files, excluding main.cpp
 file(GLOB LIB_SOURCES "src/*.cpp")
@@ -30,14 +32,14 @@ pybind11_add_module(duckarrow src/binding.cpp)
 # Set the Python module output name
 set_target_properties(duckarrow PROPERTIES OUTPUT_NAME "duckarrow")
 # Link the DuckArrowBridge shared library to the pybind11 module
-target_link_libraries(duckarrow PRIVATE DuckArrowBridgeLib)
+target_link_libraries(duckarrow PRIVATE DuckArrowBridgeLib arrow_python)
 
 
 
 # -DVCPKG_TARGET_TRIPLET:STRING=x64-mingw-dynamic
 set(VCPKG_TARGET_TRIPLET "x64-mingw-dynamic")
 ## Link libraries
-target_link_libraries(${PROJECT_NAME}Lib PRIVATE duckdb Arrow::arrow_shared Parquet::parquet_shared pybind11::module)
+target_link_libraries(${PROJECT_NAME}Lib PRIVATE duckdb Arrow::arrow_shared Parquet::parquet_shared pybind11::module arrow_python)
 
 # Define the DLL export macro for the shared library
 target_compile_definitions(DuckArrowBridgeLib PRIVATE BUILD_DLL)
@@ -47,7 +49,7 @@ target_compile_definitions(DuckArrowBridgeLib PRIVATE BUILD_DLL)
 # Create the executable and link it to the shared library
 add_executable(${PROJECT_NAME} src/main.cpp)
 # Link the shared library to the executable
-target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_NAME}Lib duckdb Arrow::arrow_shared Parquet::parquet_shared pybind11::module)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_NAME}Lib duckdb Arrow::arrow_shared Parquet::parquet_shared pybind11::module arrow_python)
 
 # Define the DLL directory based on the build configuration
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

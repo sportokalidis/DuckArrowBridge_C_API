@@ -6,6 +6,7 @@
 #include "thread_pool.hpp"
 #include <arrow/api.h>
 #include <duckdb.h>
+#include <arrow/python/pyarrow.h>
 
 enum class ResultType {
     PARQUET,
